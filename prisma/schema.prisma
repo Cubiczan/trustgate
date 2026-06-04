@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  did         String   @default("")
+  permissions String   @default("[]") // JSON array of permission scopes
+  status      String   @default("active") // active/revoked/suspended
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accessLogs AccessLog[]
+}
+
+model Credential {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // KYC/accredited-investor/professional-license
+  issuer      String   @default("Terminal 3")
+  status      String   @default("active") // active/expired/revoked
+  issuedAt    DateTime @default(now())
+  expiresAt   DateTime?
+  data        String   @default("{}") // JSON: credential data
+
+  presentations Presentation[]
+}
+
+model Presentation {
+  id           String   @id @default(cuid())
+  credentialId String
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  verifier     String   @default("")
+  agentId      String   @default("")
+  status       String   @default("pending") // pending/verified/rejected/expired
+  proof        String   @default("{}") // JSON: VP data
+  createdAt     DateTime @default(now())
+}
+
+model AccessLog {
+  id        String   @id @default(cuid())
+  agentId   String
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  action    String   // credential_requested/data_accessed/transaction_executed
+  resource  String   @default("")
+ details   String   @default("{}") // JSON
+  createdAt DateTime @default(now())
+}

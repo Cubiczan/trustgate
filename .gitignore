@@ -1,0 +1,57 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# testing
+coverage/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+dist/
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env*.local
+.env.production
+
+# vercel
+.vercel
+
+# turbo
+.turbo
+
+# prisma
+prisma/dev.db
+prisma/dev.db-journal
+prisma/migrations/
+
+# database files
+db/*.db
+db/*.db-journal
+db/*.db-wal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store

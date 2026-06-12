@@ -253,7 +253,7 @@ function DashboardTab({ stats, onNavigate, onRefresh }: {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchLogs = async () => {
       try {
         const res = await fetch('/api/access-logs')
         const data = await res.json()
@@ -261,7 +261,7 @@ function DashboardTab({ stats, onNavigate, onRefresh }: {
       } catch { /* ignore */ }
       finally { setLoading(false) }
     }
-    fetch()
+    fetchLogs()
   }, [])
 
   const statCards = [

@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 const db = new PrismaClient({
   log: ['error', 'warn'],
@@ -187,7 +187,7 @@ async function main() {
     "/v1/user/social_data", "/v1/notification/webhook",
   ];
 
-  const accessLogs = [];
+  const accessLogs: Prisma.AccessLogCreateManyInput[] = [];
   for (let i = 0; i < 12; i++) {
     const agent = agents[Math.floor(Math.random() * agents.length)];
     accessLogs.push({

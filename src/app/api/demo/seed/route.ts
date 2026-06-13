@@ -1,7 +1,15 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { requireAuthResponse } from '@/lib/resilience'
 
-export async function POST() {
+export async function POST(req: Request) {
+  // This endpoint is destructive (it wipes agents/credentials/presentations/
+  // logs before re-seeding). Gate it behind a bearer token and FAIL CLOSED:
+  // when DEMO_SEED_TOKEN is unset, requireAuthResponse returns 503 rather than
+  // allowing the wipe. Callers send `Authorization: Bearer <DEMO_SEED_TOKEN>`.
+  const denied = requireAuthResponse(req, { token: process.env.DEMO_SEED_TOKEN })
+  if (denied) return denied
+
   try {
     // Clear existing data
     await db.accessLog.deleteMany()

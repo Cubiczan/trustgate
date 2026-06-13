@@ -10,6 +10,8 @@
  * Success format: { data: ... }
  */
 
+import { safeFetch, isResilienceError } from './resilience'
+
 // Production base URL (docs list staging.terminal3.io but api.terminal3.io is the live endpoint)
 const T3_API_BASE = process.env.T3_API_BASE || 'https://api.terminal3.io'
 const T3_API_KEY = process.env.T3_API_KEY || ''
@@ -66,9 +68,15 @@ interface T3RequestOptions {
   body?: unknown
   params?: Record<string, string>
   subClientId?: string
+  /**
+   * OIDC access token. When present the request authenticates with an
+   * `Authorization: Bearer <token>` header instead of the `x-api-token`
+   * client header — required by the /openidc endpoints.
+   */
+  accessToken?: string
 }
 
-export async function t3Request<T = unknown>({ method, path, body, params, subClientId }: T3RequestOptions): Promise<T3ApiResult<T>> {
+export async function t3Request<T = unknown>({ method, path, body, params, subClientId, accessToken }: T3RequestOptions): Promise<T3ApiResult<T>> {
   const url = new URL(`${T3_API_BASE}${path}`)
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -78,7 +86,14 @@ export async function t3Request<T = unknown>({ method, path, body, params, subCl
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-api-token': T3_API_KEY,
+  }
+
+  // OIDC endpoints authenticate with a Bearer access token; everything else
+  // uses the client-level x-api-token header.
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+  } else {
+    headers['x-api-token'] = T3_API_KEY
   }
 
   // Optional sub-client delegation header
@@ -86,11 +101,25 @@ export async function t3Request<T = unknown>({ method, path, body, params, subCl
     headers['x-api-subclient-id'] = subClientId
   }
 
-  const res = await fetch(url.toString(), {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    // safeFetch adds a 10s per-attempt timeout (AbortSignal) and exponential
+    // backoff with jitter, retrying on 429/5xx and network failures.
+    res = await safeFetch(url.toString(), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      timeoutMs: 10_000,
+      maxAttempts: 3,
+    })
+  } catch (err) {
+    // safeFetch throws a typed ResilienceError once retries are exhausted (or
+    // on timeout/network failure). Surface it in the existing result shape so
+    // callers keep their { success, status, data, error } contract.
+    const status = isResilienceError(err) ? (err.status ?? 0) : 0
+    const error = err instanceof Error ? err.message : `T3 API request failed`
+    return { success: false, status, data: null, error }
+  }
 
   const data = await res.json().catch(() => null)
 
@@ -217,24 +246,34 @@ export function getUserInfoV2(accessToken: string) {
   return t3Request<Record<string, unknown>>({
     method: 'GET',
     path: '/v2/openidc/user',
-  }).then(result => {
-    // Note: OIDC endpoints use Bearer token, not x-api-token
-    // Caller should use a direct fetch with Authorization header
-    return result
+    accessToken,
   })
 }
 
 /** GET /v1/openidc/user/social_connections — Get social connection statuses */
 export function getSocialConnections(accessToken: string) {
-  return t3Get('/v1/openidc/user/social_connections')
+  return t3Request({
+    method: 'GET',
+    path: '/v1/openidc/user/social_connections',
+    accessToken,
+  })
 }
 
 /** GET /v1/openidc/credentials — List user credentials via OIDC */
 export function listUserCredentials(accessToken: string) {
-  return t3Get<T3UserCredential[]>('/v1/openidc/credentials')
+  return t3Request<T3UserCredential[]>({
+    method: 'GET',
+    path: '/v1/openidc/credentials',
+    accessToken,
+  })
 }
 
 /** POST /v1/openidc/credentials/proof — Generate proof via OIDC */
 export function generateUserProof(body: Record<string, unknown>, accessToken: string) {
-  return t3Post('/v1/openidc/credentials/proof', body)
+  return t3Request({
+    method: 'POST',
+    path: '/v1/openidc/credentials/proof',
+    body,
+    accessToken,
+  })
 }

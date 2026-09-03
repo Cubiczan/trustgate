@@ -14,6 +14,7 @@ TrustGate is a comprehensive dashboard for managing AI agent identities, verifia
 - **Sub-Client Management** — Multi-tenant sub-client administration
 - **Access Audit** — Real-time logging and monitoring of all access events
 - **Live T3N API Integration** — Full integration with Terminal 3's REST API (25+ endpoints)
+- **UiPath Intake** — Ingest credential, presentation, and access-log handoffs from UiPath
 
 ## Architecture
 
@@ -106,6 +107,11 @@ GET /v1/user/{user_id}/wallet_addresses
 Header: x-api-token: <your-api-token>
 Optional Header: x-api-subclient-id: <subclient-id>
 ```
+
+### UiPath Intake
+
+UiPath can POST credential, presentation, or access-log payloads to `/api/uipath`.
+Set `UIPATH_WEBHOOK_SECRET` if you want signature checks on the webhook.
 
 ## Dashboard Tabs
 

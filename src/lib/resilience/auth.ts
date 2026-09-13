@@ -1,3 +1,4 @@
+import { timingSafeEqualString } from "../timingSafeEqual.js";
 import {
   SlidingWindowRateLimiter,
   type RateLimitOptions,
@@ -80,7 +81,7 @@ export function requireAuth(
   }
 
   const provided = extractBearer(req.headers.get("authorization"));
-  if (!provided || provided !== expected) {
+  if (!provided || !timingSafeEqualString(provided, expected)) {
     return { ok: false, status: 401, reason: "Unauthorized" };
   }
 

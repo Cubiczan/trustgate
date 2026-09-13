@@ -1,10 +1,12 @@
 import { db } from '@/lib/db'
+import { timingSafeEqualString } from '@/lib/timingSafeEqual'
 import { NextRequest, NextResponse } from 'next/server'
 
 function signatureIsValid(signature: string | null) {
   const secret = process.env.UIPATH_WEBHOOK_SECRET
   if (!secret) return true
-  return signature === secret
+  if (signature == null) return false
+  return timingSafeEqualString(signature, secret)
 }
 
 export async function POST(request: NextRequest) {

@@ -16,3 +16,5 @@ jobs:
       - run: npx tsc --noEmit
       - name: Webhook signature gate tests (fail-closed)
         run: node --experimental-strip-types --test src/lib/uipathSignature.test.ts
+      - name: Sealed evidence envelope tests (row 10)
+        run: node --experimental-strip-types --test src/lib/evidenceEnvelope.test.ts

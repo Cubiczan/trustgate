@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { signatureRefusalReason } from '@/lib/uipathSignature'
+import { computeEvidenceHash } from '@/lib/evidenceEnvelope'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -60,13 +61,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'agentId and action are required for access log payloads' }, { status: 400 })
     }
 
-    const accessLog = await db.accessLog.create({
-      data: {
+    // Seal the entry into the evidence chain (row 10): hash over canonical
+    // content plus the prior row's entryHash. The read-append pair runs inside
+    // an interactive transaction — two concurrent webhooks must not both read
+    // the same prevHash and fork the chain. SQLite's single-writer model
+    // serializes the transaction; id (monotonic), not createdAt, orders the
+    // chain lookup because createdAt has ms granularity and can tie.
+    const accessLog = await db.$transaction(async (tx) => {
+      const last = await tx.accessLog.findFirst({
+        orderBy: { id: 'desc' },
+        select: { entryHash: true },
+      })
+      const prevHash = last?.entryHash ?? ''
+      const entry = {
         agentId,
         action,
         resource: resource || body.subject || 'UiPath handoff',
         details: JSON.stringify(details || body),
-      },
+        createdAt: new Date(),
+      }
+      return tx.accessLog.create({
+        data: {
+          ...entry,
+          prevHash,
+          entryHash: computeEvidenceHash(entry, prevHash),
+        },
+      })
     })
 
     return NextResponse.json({ kind: 'access_log', accessLog }, { status: 201 })

@@ -51,5 +51,7 @@ model AccessLog {
   action    String   // credential_requested/data_accessed/transaction_executed
   resource  String   @default("")
  details   String   @default("{}") // JSON
+  entryHash String   @default("") // SHA-256 over canonical entry + prevHash (sealed evidence chain)
+  prevHash  String   @default("") // prior row's entryHash
   createdAt DateTime @default(now())
 }

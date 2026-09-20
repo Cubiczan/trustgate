@@ -25,6 +25,8 @@ export interface SealedEvidenceRow extends EvidenceEntry {
 export interface ChainVerification {
   intact: boolean
   checked: number
+  /** Rows with a legacy empty entryHash: unsealed, cannot participate in the chain. */
+  unsealed: number
   brokenAtIndex: number | null
   reason: string | null
 }
@@ -62,30 +64,51 @@ export function computeEvidenceHash(entry: EvidenceEntry, prevHash: string): str
 /**
  * Verify a chain of sealed rows (ascending order). Detects content tampering
  * (recomputed hash mismatch), link tampering (prevHash mismatch), and gaps.
+ *
+ * Rows with an empty `entryHash` are pre-chain legacy records (added before
+ * sealing existed, or written by a path that never sealed): they cannot
+ * participate in a hash chain, so they are skipped and counted in `unsealed`
+ * rather than reported as breakage. The first sealed row after them starts a
+ * fresh genesis (its `prevHash` must be `''`, matching the append path's
+ * `last?.entryHash ?? ''` lookup), and sealed rows chain onto the last sealed
+ * row's `entryHash` — never onto an unsealed row.
  */
 export function verifyEvidenceChain(rows: SealedEvidenceRow[]): ChainVerification {
   if (rows.length === 0) {
-    return { intact: true, checked: 0, brokenAtIndex: null, reason: null }
+    return { intact: true, checked: 0, unsealed: 0, brokenAtIndex: null, reason: null }
   }
+  let unsealed = 0
+  let lastSealedHash: string | null = null
+  let checkedSealed = 0
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
+    if (row.entryHash === '') {
+      // Legacy unsealed row: absent from the chain, reported separately.
+      unsealed++
+      continue
+    }
+    checkedSealed++
     const expected = computeEvidenceHash(row, row.prevHash)
     if (row.entryHash !== expected) {
       return {
         intact: false,
-        checked: rows.length,
+        checked: checkedSealed,
+        unsealed,
         brokenAtIndex: i,
         reason: `entry hash mismatch at index ${i}: recorded ${row.entryHash}, computed ${expected}`,
       }
     }
-    if (i > 0 && row.prevHash !== rows[i - 1].entryHash) {
+    const expectedPrev = lastSealedHash ?? ''
+    if (row.prevHash !== expectedPrev) {
       return {
         intact: false,
-        checked: rows.length,
+        checked: checkedSealed,
+        unsealed,
         brokenAtIndex: i,
-        reason: `chain broken at index ${i}: prevHash does not match the prior entryHash`,
+        reason: `chain broken at index ${i}: prevHash does not match the prior sealed entryHash`,
       }
     }
+    lastSealedHash = row.entryHash
   }
-  return { intact: true, checked: rows.length, brokenAtIndex: null, reason: null }
+  return { intact: true, checked: checkedSealed, unsealed, brokenAtIndex: null, reason: null }
 }

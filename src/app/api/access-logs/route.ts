@@ -22,21 +22,25 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Row 10 sealed-evidence verify: recompute the hash chain over the
-    // returned entries (ascending order) on request.
+    // Row 10 sealed-evidence verify: attest the FULL persisted chain, not the
+    // filtered last-100 listing window — a window-bounded verification would
+    // attest nothing about rows outside the page (and the first included row
+    // would have no verified link to the history before it). Filters affect
+    // only the returned listing; verification always walks every row in
+    // insertion order (id, monotonic — createdAt has ms granularity and can
+    // tie under burst writes).
     let chain: ChainVerification | undefined
     if (searchParams.get('verify') === '1') {
-      const sealed = [...logs]
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-        .map((log) => ({
-          agentId: log.agentId,
-          action: log.action,
-          resource: log.resource,
-          details: log.details,
-          createdAt: log.createdAt,
-          entryHash: log.entryHash,
-          prevHash: log.prevHash,
-        }))
+      const all = await db.accessLog.findMany({ orderBy: { id: 'asc' } })
+      const sealed = all.map((log) => ({
+        agentId: log.agentId,
+        action: log.action,
+        resource: log.resource,
+        details: log.details,
+        createdAt: log.createdAt,
+        entryHash: log.entryHash,
+        prevHash: log.prevHash,
+      }))
       chain = verifyEvidenceChain(sealed)
     }
 

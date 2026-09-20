@@ -93,3 +93,51 @@ describe('verifyEvidenceChain (tamper detection)', () => {
     assert.equal(result.checked, 0)
   })
 })
+
+describe('verifyEvidenceChain — unsealed legacy rows', () => {
+  const sealedChain = seal([entry(), entry({ action: 'trade_executed' }), entry({ action: 'settlement_recorded' })])
+
+  it('skips empty-hash legacy rows and reports them as unsealed, not broken', () => {
+    // The real migration scenario: pre-chain rows (empty entryHash from the
+    // @default("") migration) precede any sealing; the first append after them
+    // starts a fresh genesis (prevHash ''), per the append path's
+    // `last?.entryHash ?? ''` lookup. Legacy rows must not report as breakage.
+    const legacy = { ...sealedChain[0], entryHash: '', prevHash: '' }
+    const fresh = seal([entry({ action: 'first_post_legacy' }), entry({ action: 'second_post_legacy' })])
+    const result = verifyEvidenceChain([legacy, ...fresh])
+    assert.equal(result.intact, true)
+    assert.equal(result.unsealed, 1)
+    assert.equal(result.checked, 2)
+    assert.equal(result.brokenAtIndex, null)
+  })
+
+  it('chains a sealed row onto the last sealed row across an unsealed gap', () => {
+    // A sealed row written after legacy rows has prevHash '' (genesis) per the
+    // append path's `last?.entryHash ?? ''` lookup; it must verify as intact.
+    const genesis = entry({ action: 'first_sealed_after_legacy' })
+    const withLegacyThenSealed = [
+      { ...sealedChain[0], entryHash: '', prevHash: '' },
+      { ...genesis, prevHash: '', entryHash: computeEvidenceHash(genesis, '') },
+    ]
+    const result = verifyEvidenceChain(withLegacyThenSealed)
+    assert.equal(result.intact, true)
+    assert.equal(result.unsealed, 1)
+    assert.equal(result.checked, 1)
+  })
+
+  it('still detects tampering of a sealed row after unsealed rows', () => {
+    const genesis = entry({ action: 'post_legacy_genesis' })
+    const second = entry({ action: 'post_legacy_second' })
+    const genesisHash = computeEvidenceHash(genesis, '')
+    const rows = [
+      { ...sealedChain[0], entryHash: '', prevHash: '' },
+      { ...genesis, prevHash: '', entryHash: genesisHash },
+      { ...second, prevHash: genesisHash, entryHash: computeEvidenceHash(second, genesisHash) },
+    ]
+    const tampered = rows.map((r, i) => (i === 2 ? { ...r, details: '{"tampered":true}' } : r))
+    const result = verifyEvidenceChain(tampered)
+    assert.equal(result.intact, false)
+    assert.equal(result.brokenAtIndex, 2)
+    assert.equal(result.unsealed, 1)
+  })
+})

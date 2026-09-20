@@ -177,6 +177,12 @@ The access audit trail (`AccessLog` via `prisma/schema.prisma`, written by the U
 
 **Boundary (stated, per the row's scope):** the seal is application-level (SQLite rows + recomputable chain), not an external attestation; a database-level adversary who can rewrite every row can rebuild a consistent chain. The row's deploy condition — independent of external trust level — is met by making any *partial* tampering (the realistic case: editing one denial record) detectable.
 
+**Append atomicity:** the read-prevHash-then-create pair runs inside one `db.$transaction` (src/app/api/uipath/route.ts), serialized by SQLite's single-writer model, so concurrent webhooks cannot both read the same `prevHash` and fork the chain. The chain orders by monotonic `id` (createdAt has ms granularity and can tie under burst writes).
+
+**Verification scope:** `verify=1` attests the **full persisted chain** — every `AccessLog` row in `id` order — independent of the listing's filters and `take: 100` window, so a page of results is never mistaken for a complete-chain attestation.
+
+**Legacy unsealed rows:** rows written before sealing existed (empty `entryHash` from the schema default) cannot participate in a hash chain; `verifyEvidenceChain` skips them and reports the count as `unsealed` instead of flagging a break. The first sealed row after a legacy gap starts a fresh genesis (`prevHash: ''`), matching the append path's `last?.entryHash ?? ''` lookup.
+
 ---
 
 ## License

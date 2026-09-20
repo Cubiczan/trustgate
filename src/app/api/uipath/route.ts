@@ -1,18 +1,11 @@
 import { db } from '@/lib/db'
-import { timingSafeEqualString } from '@/lib/timingSafeEqual'
+import { signatureIsValid } from '@/lib/uipathSignature'
 import { NextRequest, NextResponse } from 'next/server'
-
-function signatureIsValid(signature: string | null) {
-  const secret = process.env.UIPATH_WEBHOOK_SECRET
-  if (!secret) return true
-  if (signature == null) return false
-  return timingSafeEqualString(signature, secret)
-}
 
 export async function POST(request: NextRequest) {
   try {
     const signature = request.headers.get('x-uipath-signature') || request.headers.get('x-webhook-signature')
-    if (!signatureIsValid(signature)) {
+    if (!signatureIsValid(signature, process.env.UIPATH_WEBHOOK_SECRET)) {
       return NextResponse.json({ error: 'Invalid UiPath signature' }, { status: 401 })
     }
 

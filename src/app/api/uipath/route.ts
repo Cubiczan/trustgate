@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { signatureRefusalReason } from '@/lib/uipathSignature'
+import { computeEvidenceHash } from '@/lib/evidenceEnvelope'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -60,12 +61,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'agentId and action are required for access log payloads' }, { status: 400 })
     }
 
+    // Seal the entry into the evidence chain (row 10): hash over canonical
+    // content plus the prior row's entryHash.
+    const last = await db.accessLog.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { entryHash: true },
+    })
+    const prevHash = last?.entryHash ?? ''
+    const entry = {
+      agentId,
+      action,
+      resource: resource || body.subject || 'UiPath handoff',
+      details: JSON.stringify(details || body),
+      createdAt: new Date(),
+    }
     const accessLog = await db.accessLog.create({
       data: {
-        agentId,
-        action,
-        resource: resource || body.subject || 'UiPath handoff',
-        details: JSON.stringify(details || body),
+        ...entry,
+        prevHash,
+        entryHash: computeEvidenceHash(entry, prevHash),
       },
     })
 

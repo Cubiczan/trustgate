@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireAuthResponse } from '@/lib/resilience'
+import { computeEvidenceHash } from '@/lib/evidenceEnvelope'
 
 export async function POST(req: Request) {
   // This endpoint is destructive (it wipes agents/credentials/presentations/
@@ -242,9 +243,8 @@ export async function POST(req: Request) {
       },
     })
 
-    // Create demo access logs
-    await db.accessLog.createMany({
-      data: [
+    // Create demo access logs, sealed into the evidence chain (row 10).
+    const demoAccessLogs = [
         {
           agentId: agent1.id,
           action: 'credential_requested',
@@ -329,8 +329,18 @@ export async function POST(req: Request) {
           details: JSON.stringify({ amount: '$250,000', risk: 'medium', flags: ['large_volume', 'new_counterparty'] }),
           createdAt: new Date('2025-06-01T17:00:00'),
         },
-      ],
+    ]
+
+    // Seal the demo chain deterministically (fixed createdAt values), so the
+    // seeded evidence verifies intact.
+    let prevHash = ''
+    const sealedLogs = demoAccessLogs.map((entry) => {
+      const entryHash = computeEvidenceHash(entry, prevHash)
+      const sealed = { ...entry, prevHash, entryHash }
+      prevHash = entryHash
+      return sealed
     })
+    await db.accessLog.createMany({ data: sealedLogs })
 
     return NextResponse.json({
       success: true,

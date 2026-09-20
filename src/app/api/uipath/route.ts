@@ -1,18 +1,15 @@
 import { db } from '@/lib/db'
-import { timingSafeEqualString } from '@/lib/timingSafeEqual'
+import { signatureRefusalReason } from '@/lib/uipathSignature'
 import { NextRequest, NextResponse } from 'next/server'
-
-function signatureIsValid(signature: string | null) {
-  const secret = process.env.UIPATH_WEBHOOK_SECRET
-  if (!secret) return true
-  if (signature == null) return false
-  return timingSafeEqualString(signature, secret)
-}
 
 export async function POST(request: NextRequest) {
   try {
     const signature = request.headers.get('x-uipath-signature') || request.headers.get('x-webhook-signature')
-    if (!signatureIsValid(signature)) {
+    const refusal = signatureRefusalReason(signature, process.env.UIPATH_WEBHOOK_SECRET)
+    if (refusal) {
+      // Server-side distinction between a misconfigured deployment and a
+      // bad caller — the 401 body stays generic on purpose.
+      console.warn(`[uipath] webhook refused (${refusal})`)
       return NextResponse.json({ error: 'Invalid UiPath signature' }, { status: 401 })
     }
 

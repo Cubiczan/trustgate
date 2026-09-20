@@ -111,7 +111,9 @@ Optional Header: x-api-subclient-id: <subclient-id>
 ### UiPath Intake
 
 UiPath can POST credential, presentation, or access-log payloads to `/api/uipath`.
-Set `UIPATH_WEBHOOK_SECRET` if you want signature checks on the webhook.
+Signature checks are always on and fail closed: set `UIPATH_WEBHOOK_SECRET` and have
+UiPath send the value in the `x-uipath-signature` (or `x-webhook-signature`) header.
+Without a configured secret the endpoint rejects every request.
 
 ## Dashboard Tabs
 
